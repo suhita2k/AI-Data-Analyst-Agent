@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard – ADA{% endblock %}
+
+{% block content %}
+<section class="hero">
+    <div class="hero-text">
+        <div class="badge">Powered by Advanced AI</div>
+        <h1>Your AI Agent for Smart Excel Data Analysis</h1>
+        <p>
+            Upload Excel or CSV files and ask questions in plain English.
+            ADA will generate charts, insights, and downloadable reports automatically.
+        </p>
+        <button id="startBtn" class="btn btn-primary">Upload Excel / CSV</button>
+    </div>
+</section>
+
+<section class="features">
+    <div class="card">
+        <div class="icon">⬆️</div>
+        <h3>Easy Upload</h3>
+        <p>Drag &amp; drop .xlsx, .xls, or .csv. ADA understands your data instantly.</p>
+    </div>
+    <div class="card">
+        <div class="icon">💬</div>
+        <h3>Natural Language</h3>
+        <p>Ask “Show sales trend” or “Which product performed best?”</p>
+    </div>
+    <div class="card">
+        <div class="icon">📊</div>
+        <h3>Smart Visualizations</h3>
+        <p>ADA selects the right chart for each question.</p>
+    </div>
+</section>
+
+<section class="workspace">
+    <div class="uploader" id="dropzone">
+        <input type="file" id="fileInput" accept=".csv,.xlsx,.xls"/>
+        <p>Drop your file here or click to browse</p>
+        <small id="uploadHelp">Max size: 20MB. Your file stays on this machine.</small>
+    </div>
+
+    <div class="meta" id="metaPanel" hidden>
+        <h3>Dataset</h3>
+        <div id="metaSummary"></div>
+        <div class="meta-grid" id="columnsGrid"></div>
+    </div>
+
+    <div class="qa" id="qaPanel" hidden>
+        <div class="ask">
+            <input
+                type="text"
+                id="question"
+                placeholder="Ask a question about your data..."
+            />
+            <button id="askBtn" class="btn btn-primary">Ask ADA</button>
+        </div>
+
+        <div class="answer" id="answer"></div>
+
+        <div id="chart" class="chart"></div>
+
+        <div class="toolbar">
+            <button id="downloadReport" class="btn">Download Report</button>
+            <button id="downloadPng" class="btn">Download Chart PNG</button>
+        </div>
+
+        <div class="preview" id="preview"></div>
+    </div>
+</section>
+{% endblock %}
+
+{% block extra_scripts %}
+<script src="{{ url_for('static', filename='js/app.js') }}"></script>
+{% endblock %}
