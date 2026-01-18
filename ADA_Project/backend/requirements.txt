@@ -12,3 +12,4 @@ google-generativeai==0.8.3
 openai==1.53.0
 pydantic==2.9.2
 werkzeug==3.0.4
+gunicorn==21.20
