@@ -2,7 +2,6 @@ import io
 import os
 import time
 import uuid
-import math
 from typing import Dict, Any
 
 from dotenv import load_dotenv
@@ -67,22 +66,6 @@ DATASETS: Dict[str, Dict[str, Any]] = {}
 
 def allowed_file(filename: str) -> bool:
     return "." in filename and filename.rsplit(".", 1)[1].lower() in ALLOWED_EXTENSIONS
-
-
-def clean_for_json(obj):
-    """
-    Recursively replace NaN / inf with None so that JSON is valid
-    and can be parsed by JavaScript (JSON.parse doesn't allow NaN).
-    """
-    if isinstance(obj, float):
-        if math.isnan(obj) or math.isinf(obj):
-            return None
-        return obj
-    if isinstance(obj, dict):
-        return {k: clean_for_json(v) for k, v in obj.items()}
-    if isinstance(obj, list):
-        return [clean_for_json(v) for v in obj]
-    return obj
 
 
 # Create DB tables once at startup
@@ -211,11 +194,13 @@ def api_upload():
             "created_at": time.time(),
             "history": [],
         }
+    except RuntimeError as e:
+        # e.g. "Pandas is not installed in this environment..."
+        return jsonify({"error": str(e)}), 400
     except Exception as e:
         return jsonify({"error": f"Failed to read file: {str(e)}"}), 400
 
-    # Clean NaN/inf before returning JSON
-    return jsonify({"dataset_id": dataset_id, "meta": clean_for_json(meta)})
+    return jsonify({"dataset_id": dataset_id, "meta": meta})
 
 
 # ---------------------------------------------------------
@@ -228,14 +213,30 @@ def api_schema(dataset_id: str):
     item = DATASETS.get(dataset_id)
     if not item:
         return jsonify({"error": "Dataset not found"}), 404
-    return jsonify(
-        {"dataset_id": dataset_id, "meta": clean_for_json(item["meta"])}
-    )
+    return jsonify({"dataset_id": dataset_id, "meta": item["meta"]})
 
 
 # ---------------------------------------------------------
 # API: ask question
 # ---------------------------------------------------------
+
+def clean_for_json(obj):
+    """
+    Recursively replace NaN / inf with None so that JSON is valid
+    and can be parsed by JavaScript (JSON.parse doesn't allow NaN).
+    """
+    import math
+
+    if isinstance(obj, float):
+        if math.isnan(obj) or math.isinf(obj):
+            return None
+        return obj
+    if isinstance(obj, dict):
+        return {k: clean_for_json(v) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [clean_for_json(v) for v in obj]
+    return obj
+
 
 @app.route("/api/ask", methods=["POST"])
 @login_required
@@ -270,7 +271,6 @@ def api_ask():
         fig, data_preview, agg_preview = build_figure_from_spec(df, spec["chart"])
         fig_json = figure_to_json(fig)
     except Exception as e:
-        # Clean data preview if exists
         dp = (
             clean_for_json(data_preview.to_dict(orient="records"))
             if "data_preview" in locals()
@@ -301,9 +301,7 @@ def api_ask():
         }
     )
 
-    data_preview_clean = clean_for_json(
-        data_preview.to_dict(orient="records")
-    )
+    data_preview_clean = clean_for_json(data_preview.to_dict(orient="records"))
     agg_preview_clean = (
         clean_for_json(agg_preview.to_dict(orient="records"))
         if agg_preview is not None
