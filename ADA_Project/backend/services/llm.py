@@ -12,10 +12,6 @@ load_dotenv()
 
 PROVIDER = os.getenv("ADA_LLM_PROVIDER", "gemini").lower()
 
-# -----------------------------
-# JSON spec schema
-# -----------------------------
-
 ALLOWED_CHARTS = {"line", "bar", "pie", "histogram", "scatter"}
 ALLOWED_AGG = {"sum", "mean", "count", "median", "min", "max"}
 
@@ -47,13 +43,6 @@ class ChartSpec(BaseModel):
 
 
 def _compose_prompt(question: str, meta: dict, df_sample: Any) -> str:
-    """
-    Build the text prompt we send to the LLM.
-
-    df_sample is expected to be a small DataFrame-like object with
-    .to_dict(orient="records"), but we treat it generically to avoid
-    requiring pandas in this module.
-    """
     cols = meta.get("columns", [])
     ltypes = meta.get("logical_types", {})
 
@@ -109,16 +98,9 @@ User question: {question}
 
 
 def _validate_and_fix(spec_dict: dict, meta: dict) -> dict:
-    """
-    Validate LLM output and fix obvious problems:
-    - Ensure columns exist
-    - Fill missing x/y/aggregation with reasonable defaults
-    - Fall back to a minimal safe spec if validation fails
-    """
     cols = set(meta.get("columns", []))
     chart = (spec_dict or {}).get("chart", {}) or {}
 
-    # Drop invalid columns
     for key in ("x", "y", "group_by"):
         val = chart.get(key)
         if val and val not in cols:
@@ -126,30 +108,25 @@ def _validate_and_fix(spec_dict: dict, meta: dict) -> dict:
 
     ltypes = meta.get("logical_types", {})
 
-    # If missing x for line chart, try to pick a datetime column
     if chart.get("chart_type") == "line" and not chart.get("x"):
         dt = [c for c, t in ltypes.items() if t == "datetime"]
         if dt:
             chart["x"] = dt[0]
 
-    # If missing y, pick first numeric
     if not chart.get("y"):
         nums = [c for c, t in ltypes.items() if t == "numeric"]
         if nums:
             chart["y"] = nums[0]
 
-    # Default aggregation if missing
     if not chart.get("aggregation"):
         chart["aggregation"] = "sum"
 
     spec_dict["chart"] = chart
 
-    # Validate with Pydantic
     try:
-        ChartSpec(**chart)  # if this fails, we go to minimal fallback
+        ChartSpec(**chart)
         return spec_dict
     except ValidationError:
-        # Minimal final fallback
         fallback_chart = {
             "chart_type": "bar",
             "x": None,
@@ -166,14 +143,6 @@ def _validate_and_fix(spec_dict: dict, meta: dict) -> dict:
 def generate_chart_spec_and_insight(
     question: str, meta: dict, df_sample: Any
 ) -> dict:
-    """
-    Main function used by the API:
-    - Compose prompt
-    - Call Gemini or OpenAI (depending on PROVIDER)
-    - Parse JSON
-    - Validate + fix spec
-    - Return dict with "chart", "insight", "suggested_questions"
-    """
     prompt = _compose_prompt(question, meta, df_sample)
 
     if PROVIDER == "gemini":
@@ -217,5 +186,4 @@ def generate_chart_spec_and_insight(
         spec = _validate_and_fix(spec, meta)
         return spec
     except Exception as e:
-        # If parsing or validation fails, raise a clear error
         raise RuntimeError(f"LLM response parsing failed: {e}; raw={text[:500]}")
