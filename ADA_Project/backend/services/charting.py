@@ -1,8 +1,45 @@
-import json
+"""
+Chart building utilities using Plotly.
 
-import pandas as pd
-import plotly.express as px
-import plotly.io as pio
+Designed to work in two modes:
+
+1. Full mode (local development):
+   - pandas, plotly.express, plotly.io are installed
+   - build real charts from DataFrames
+
+2. Light mode (Render demo using requirements-render.txt without pandas):
+   - pandas may be missing
+   - we avoid import-time crashes and instead raise RuntimeError
+     when a chart is requested.
+"""
+
+from __future__ import annotations
+
+import json
+from typing import Any, Dict, Tuple
+
+# Try to import pandas/plotly; if not available (e.g. on Render demo), fall back gracefully
+try:
+    import pandas as pd  # type: ignore
+    import plotly.express as px  # type: ignore
+    import plotly.io as pio  # type: ignore
+except ImportError:  # pragma: no cover - only in light environments
+    pd = None  # type: ignore
+    px = None  # type: ignore
+    pio = None  # type: ignore
+
+
+def _ensure_plot_deps() -> None:
+    """
+    Raise a clear error if pandas/plotly are not available.
+    Used to avoid import-time crashes in light environments.
+    """
+    if pd is None or px is None or pio is None:
+        raise RuntimeError(
+            "Plotting dependencies (pandas/plotly) are not installed in this environment. "
+            "Chart rendering is disabled in this hosted demo. "
+            "Run the project locally with full requirements.txt to enable charts."
+        )
 
 
 def figure_to_json(fig):
@@ -10,10 +47,11 @@ def figure_to_json(fig):
     Convert a Plotly figure to a pure JSON object
     that can be sent to the frontend.
     """
+    _ensure_plot_deps()
     return json.loads(pio.to_json(fig))
 
 
-def _apply_filters(df: pd.DataFrame, filters: dict | None):
+def _apply_filters(df, filters: Dict[str, Any] | None):
     """
     Apply simple filter rules to a DataFrame.
     Supported operators per column:
@@ -22,6 +60,7 @@ def _apply_filters(df: pd.DataFrame, filters: dict | None):
       {"Region": {"eq": "North"},
        "Sales": {"gt": 1000}}
     """
+    _ensure_plot_deps()
     if not filters:
         return df
 
@@ -46,12 +85,19 @@ def _apply_filters(df: pd.DataFrame, filters: dict | None):
     return out
 
 
-def _aggregate(df: pd.DataFrame, x: str | None, y: str | None,
-               group_by: str | None, aggregation: str | None):
+def _aggregate(
+    df,
+    x: str | None,
+    y: str | None,
+    group_by: str | None,
+    aggregation: str | None,
+) -> Tuple[Any, str]:
     """
     Aggregate data for plotting.
     If y is None, we'll produce counts by category.
     """
+    _ensure_plot_deps()
+
     if group_by and group_by != x:
         group_cols = [c for c in [x, group_by] if c]
     else:
@@ -71,7 +117,7 @@ def _aggregate(df: pd.DataFrame, x: str | None, y: str | None,
     return grouped, y
 
 
-def build_figure_from_spec(df: pd.DataFrame, chart_spec: dict):
+def build_figure_from_spec(df, chart_spec: Dict[str, Any]):
     """
     Build a Plotly figure from a validated chart spec.
 
@@ -79,6 +125,8 @@ def build_figure_from_spec(df: pd.DataFrame, chart_spec: dict):
       - chart_type: "line" | "bar" | "pie" | "histogram" | "scatter"
       - x, y, group_by, aggregation, filters, title
     """
+    _ensure_plot_deps()
+
     chart_type = chart_spec.get("chart_type", "bar")
     x = chart_spec.get("x")
     y = chart_spec.get("y")
@@ -91,7 +139,7 @@ def build_figure_from_spec(df: pd.DataFrame, chart_spec: dict):
     df2 = _apply_filters(df, filters).dropna(subset=[c for c in [x, y] if c])
 
     # Ensure datetime x is sorted
-    if x and pd.api.types.is_datetime64_any_dtype(df2[x]):
+    if x and pd is not None and pd.api.types.is_datetime64_any_dtype(df2[x]):
         df2 = df2.sort_values(x)
 
     grouped, y_col = _aggregate(df2, x, y, group_by, aggregation)
@@ -130,7 +178,7 @@ def build_figure_from_spec(df: pd.DataFrame, chart_spec: dict):
     return fig, data_preview, agg_preview
 
 
-def fallback_spec(question: str, meta: dict) -> dict:
+def fallback_spec(question: str, meta: Dict[str, Any]) -> Dict[str, Any]:
     """
     Very simple heuristic chart spec used when the LLM fails
     or returns something invalid.
@@ -143,7 +191,7 @@ def fallback_spec(question: str, meta: dict) -> dict:
     nums = [c for c, t in ltypes.items() if t == "numeric"]
     cats = [c for c, t in ltypes.items() if t in ("categorical", "text")]
 
-    spec: dict[str, object] = {
+    spec: Dict[str, Any] = {
         "insight": "Here is an automatic visualization based on your data and question.",
         "suggested_questions": [
             "Show sales trend",
