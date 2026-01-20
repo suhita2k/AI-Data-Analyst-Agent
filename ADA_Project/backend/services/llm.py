@@ -1,17 +1,21 @@
 import os
 import json
-from typing import Any, Dict
+from typing import Dict, Any
 
-import pandas as pd
 from dotenv import load_dotenv
 from pydantic import BaseModel, ValidationError, field_validator
 
-# Load .env so we can read ADA_LLM_PROVIDER, API keys, etc.
+# We intentionally do NOT import pandas here, so this file works
+# even in light environments (e.g. Render demo) without pandas installed.
+
 load_dotenv()
 
 PROVIDER = os.getenv("ADA_LLM_PROVIDER", "gemini").lower()
 
-# Allowed chart types and aggregations for safety
+# -----------------------------
+# JSON spec schema
+# -----------------------------
+
 ALLOWED_CHARTS = {"line", "bar", "pie", "histogram", "scatter"}
 ALLOWED_AGG = {"sum", "mean", "count", "median", "min", "max"}
 
@@ -42,12 +46,21 @@ class ChartSpec(BaseModel):
         return v
 
 
-def _compose_prompt(question: str, meta: dict, df_sample: pd.DataFrame) -> str:
-    """Build the text prompt we send to the LLM."""
+def _compose_prompt(question: str, meta: dict, df_sample: Any) -> str:
+    """
+    Build the text prompt we send to the LLM.
 
+    df_sample is expected to be a small DataFrame-like object with
+    .to_dict(orient="records"), but we treat it generically to avoid
+    requiring pandas in this module.
+    """
     cols = meta.get("columns", [])
     ltypes = meta.get("logical_types", {})
-    sample = df_sample.to_dict(orient="records")
+
+    if df_sample is not None and hasattr(df_sample, "to_dict"):
+        sample = df_sample.to_dict(orient="records")
+    else:
+        sample = []
 
     guidance = f"""
 You are ADA, an expert data analyst.
@@ -151,7 +164,7 @@ def _validate_and_fix(spec_dict: dict, meta: dict) -> dict:
 
 
 def generate_chart_spec_and_insight(
-    question: str, meta: dict, df_sample: pd.DataFrame
+    question: str, meta: dict, df_sample: Any
 ) -> dict:
     """
     Main function used by the API:
